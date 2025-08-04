@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tercih Listesi</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    padding: 1rem;
+    margin: 0;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    table-layout: fixed;
+  }
+  th, td {
+    border: 1px solid #999;
+    padding: 8px;
+    text-align: left;
+    overflow-wrap: break-word;
+  }
+  th {
+    background: #eee;
+    cursor: default;
+    position: sticky;
+    top: 0;
+  }
+  tbody tr.dragging {
+    background: #cce5ff;
+    opacity: 0.7;
+  }
+  tbody tr.placeholder {
+    outline: 2px dashed #007bff;
+    background: #f0f8ff;
+  }
+  td[contenteditable="true"] {
+    background: #fff9c4;
+    cursor: text;
+  }
+  /* No sütunu sabit genişlik */
+  th.no-col, td.no-col {
+    width: 40px;
+    text-align: center;
+  }
+  button {
+    padding: 10px 15px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-bottom: 15px;
+    width: 100%;
+    max-width: 200px;
+  }
+  button:hover {
+    background: #0069d9;
+  }
+  #saveStatus {
+    margin-left: 10px; 
+    color: green;
+    display: inline-block;
+    vertical-align: middle;
+  }
+  .table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Mobil uyumlu stiller */
+  @media (max-width: 768px) {
+    th, td {
+      padding: 6px 4px;
+      font-size: 14px;
+    }
+    th.no-col, td.no-col {
+      width: 30px;
+    }
+    button {
+      padding: 8px 12px;
+      font-size: 14px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<h1>TERCİH LİSTESİ</h1>
+<p>Satırları sürükleyip bırakabilir, hücreleri tıklayıp düzenleyebilirsin.</p>
+<button id="saveBtn">Listeyi Kaydet</button>
+<span id="saveStatus"></span>
+
+<div class="table-container">
+  <table id="editableTable">
+    <thead>
+      <tr>
+        <th class="no-col">No</th>
+        <th>Kod</th>
+        <th>Üniversite</th>
+        <th>Program</th>
+        <th>2024 Başarı Sırası</th>
+        <th>2025 Kont.</th>
+        <th>2024 Kont.</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody">
+      <!-- Veriler JavaScript ile yüklenecek -->
+    </tbody>
+  </table>
+</div>
+
+<script>
+  // DOM elementleri
+  const tbody = document.querySelector("#tableBody");
+  const saveBtn = document.getElementById("saveBtn");
+  const saveStatus = document.getElementById("saveStatus");
+  let dragSrcEl = null;
+  let draggedRowIndex = null;
+
+  // Boş başlangıç verileri (24 boş satır)
+  const emptyData = Array(24).fill({
+    kod: "",
+    universite: "",
+    program: "",
+    basariSirasi: "",
+    kont2025: "",
+    kont2024: ""
+  });
+
+  // Tabloyu yükle
+  function loadTable() {
+    const savedData = localStorage.getItem('tercihListesi');
+    const data = savedData ? JSON.parse(savedData) : emptyData;
+    
+    tbody.innerHTML = '';
+    data.forEach((row, index) => {
+      const tr = document.createElement('tr');
+      tr.setAttribute('draggable', 'true');
+      tr.dataset.index = index;
+      
+      tr.innerHTML = `
+        <td class="no-col">${index + 1}</td>
+        <td contenteditable="true">${row.kod}</td>
+        <td contenteditable="true">${row.universite}</td>
+        <td contenteditable="true">${row.program}</td>
+        <td contenteditable="true">${row.basariSirasi}</td>
+        <td contenteditable="true">${row.kont2025}</td>
+        <td contenteditable="true">${row.kont2024}</td>
+      `;
+      
+      tbody.appendChild(tr);
+      addDnDHandlers(tr);
+    });
+  }
+
+  // Verileri kaydet
+  function saveData() {
+    const rows = tbody.querySelectorAll('tr');
+    const data = [];
+    
+    rows.forEach(row => {
+      const cells = row.querySelectorAll('td:not(.no-col)');
+      data.push({
+        kod: cells[0].textContent,
+        universite: cells[1].textContent,
+        program: cells[2].textContent,
+        basariSirasi: cells[3].textContent,
+        kont2025: cells[4].textContent,
+        kont2024: cells[5].textContent
+      });
+    });
+    
+    localStorage.setItem('tercihListesi', JSON.stringify(data));
+    saveStatus.textContent = 'Liste kaydedildi!';
+    setTimeout(() => saveStatus.textContent = '', 3000);
+  }
+
+  // Sıra numaralarını güncelle
+  function updateNoColumn() {
+    const rows = tbody.querySelectorAll('tr');
+    rows.forEach((row, idx) => {
+      const noCell = row.querySelector('td.no-col');
+      if (noCell) noCell.textContent = idx + 1;
+    });
+  }
+
+  // Drag and Drop fonksiyonları
+  function handleDragStart(e) {
+    dragSrcEl = this;
+    draggedRowIndex = Array.from(tbody.children).indexOf(this);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', this.innerHTML);
+    this.classList.add('dragging');
+    
+    // Mobil cihazlar için ekstra ayar
+    if ('ontouchstart' in window) {
+      e.dataTransfer.setData('text/plain', draggedRowIndex);
+    }
+  }
+
+  function handleDragOver(e) {
+    if (e.preventDefault) e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    return false;
+  }
+
+  function handleDragEnter() {
+    if (this !== dragSrcEl) {
+      this.classList.add('placeholder');
+    }
+  }
+
+  function handleDragLeave() {
+    this.classList.remove('placeholder');
+  }
+
+  function handleDrop(e) {
+    if (e.stopPropagation) e.stopPropagation();
+    
+    const dropTarget = this;
+    const dropTargetIndex = Array.from(tbody.children).indexOf(dropTarget);
+    
+    if (dragSrcEl !== dropTarget && draggedRowIndex !== null) {
+      // Sürüklenen satırı kaldır
+      const draggedRow = dragSrcEl;
+      tbody.removeChild(draggedRow);
+      
+      // Hedef konumuna ekle (altındakiler kayacak)
+      if (dropTargetIndex > draggedRowIndex) {
+        // Aşağı doğru sürüklendi
+        tbody.insertBefore(draggedRow, dropTarget.nextSibling);
+      } else {
+        // Yukarı doğru sürüklendi
+        tbody.insertBefore(draggedRow, dropTarget);
+      }
+      
+      updateNoColumn();
+    }
+    
+    this.classList.remove('placeholder');
+    dragSrcEl.classList.remove('dragging');
+    return false;
+  }
+
+  function handleDragEnd() {
+    this.classList.remove('dragging');
+    tbody.querySelectorAll('tr').forEach(row => row.classList.remove('placeholder'));
+    draggedRowIndex = null;
+  }
+
+  function addDnDHandlers(row) {
+    row.addEventListener('dragstart', handleDragStart);
+    row.addEventListener('dragenter', handleDragEnter);
+    row.addEventListener('dragover', handleDragOver);
+    row.addEventListener('dragleave', handleDragLeave);
+    row.addEventListener('drop', handleDrop);
+    row.addEventListener('dragend', handleDragEnd);
+    
+    // Mobil dokunmatik desteği
+    row.addEventListener('touchmove', handleTouchMove, {passive: false});
+    row.addEventListener('touchend', handleTouchEnd);
+  }
+
+  // Mobil dokunmatik desteği
+  let touchStartY = 0;
+  let touchCurrentRow = null;
+
+  function handleTouchMove(e) {
+    e.preventDefault();
+    if (!touchCurrentRow) {
+      touchCurrentRow = this;
+      touchStartY = e.touches[0].clientY;
+      touchCurrentRow.classList.add('dragging');
+    }
+    
+    const y = e.touches[0].clientY;
+    const deltaY = y - touchStartY;
+    touchCurrentRow.style.transform = `translateY(${deltaY}px)`;
+    
+    // Hedef satırı bul
+    const rows = Array.from(tbody.children);
+    const currentIndex = rows.indexOf(touchCurrentRow);
+    const touchY = e.touches[0].clientY;
+    
+    for (let i = 0; i < rows.length; i++) {
+      if (i !== currentIndex) {
+        const row = rows[i];
+        const rect = row.getBoundingClientRect();
+        const rowMiddle = rect.top + rect.height / 2;
+        
+        if (touchY < rowMiddle && touchY > rect.top) {
+          if (i < currentIndex) {
+            // Yukarı kaydır
+            tbody.insertBefore(touchCurrentRow, row);
+            updateNoColumn();
+          } else {
+            // Aşağı kaydır
+            if (row.nextSibling) {
+              tbody.insertBefore(touchCurrentRow, row.nextSibling);
+            } else {
+              tbody.appendChild(touchCurrentRow);
+            }
+            updateNoColumn();
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  function handleTouchEnd() {
+    if (touchCurrentRow) {
+      touchCurrentRow.classList.remove('dragging');
+      touchCurrentRow.style.transform = '';
+      touchCurrentRow = null;
+    }
+  }
+
+  // Event listener'ları ekle
+  saveBtn.addEventListener('click', saveData);
+
+  // Sayfa yüklendiğinde tabloyu yükle
+  window.addEventListener('DOMContentLoaded', loadTable);
+</script>
+
+</body>
+</html>
