@@ -9,6 +9,9 @@
     font-family: Arial, sans-serif;
     padding: 1rem;
     margin: 0;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
   table {
     border-collapse: collapse;
@@ -43,6 +46,8 @@
   th.no-col, td.no-col {
     width: 40px;
     text-align: center;
+    cursor: move;
+    touch-action: none;
   }
   button {
     padding: 10px 15px;
@@ -138,11 +143,10 @@
     tbody.innerHTML = '';
     data.forEach((row, index) => {
       const tr = document.createElement('tr');
-      tr.setAttribute('draggable', 'true');
       tr.dataset.index = index;
       
       tr.innerHTML = `
-        <td class="no-col">${index + 1}</td>
+        <td class="no-col" draggable="true">${index + 1}</td>
         <td contenteditable="true">${row.kod}</td>
         <td contenteditable="true">${row.universite}</td>
         <td contenteditable="true">${row.program}</td>
@@ -152,7 +156,7 @@
       `;
       
       tbody.appendChild(tr);
-      addDnDHandlers(tr);
+      addDnDHandlers(tr.querySelector('.no-col'));
     });
   }
 
@@ -189,15 +193,16 @@
 
   // Drag and Drop fonksiyonları
   function handleDragStart(e) {
-    dragSrcEl = this;
-    draggedRowIndex = Array.from(tbody.children).indexOf(this);
+    dragSrcEl = this.parentElement;
+    draggedRowIndex = Array.from(tbody.children).indexOf(dragSrcEl);
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/html', this.innerHTML);
-    this.classList.add('dragging');
+    e.dataTransfer.setData('text/html', dragSrcEl.innerHTML);
+    dragSrcEl.classList.add('dragging');
     
     // Mobil cihazlar için ekstra ayar
     if ('ontouchstart' in window) {
       e.dataTransfer.setData('text/plain', draggedRowIndex);
+      e.preventDefault(); // Mobilde sayfanın kaymasını engelle
     }
   }
 
@@ -207,20 +212,26 @@
     return false;
   }
 
-  function handleDragEnter() {
-    if (this !== dragSrcEl) {
-      this.classList.add('placeholder');
+  function handleDragEnter(e) {
+    const targetRow = e.target.closest('tr');
+    if (targetRow && targetRow !== dragSrcEl) {
+      targetRow.classList.add('placeholder');
     }
   }
 
-  function handleDragLeave() {
-    this.classList.remove('placeholder');
+  function handleDragLeave(e) {
+    const targetRow = e.target.closest('tr');
+    if (targetRow) {
+      targetRow.classList.remove('placeholder');
+    }
   }
 
   function handleDrop(e) {
     if (e.stopPropagation) e.stopPropagation();
     
-    const dropTarget = this;
+    const dropTarget = e.target.closest('tr');
+    if (!dropTarget) return;
+    
     const dropTargetIndex = Array.from(tbody.children).indexOf(dropTarget);
     
     if (dragSrcEl !== dropTarget && draggedRowIndex !== null) {
@@ -240,41 +251,35 @@
       updateNoColumn();
     }
     
-    this.classList.remove('placeholder');
+    dropTarget.classList.remove('placeholder');
     dragSrcEl.classList.remove('dragging');
     return false;
   }
 
   function handleDragEnd() {
-    this.classList.remove('dragging');
-    tbody.querySelectorAll('tr').forEach(row => row.classList.remove('placeholder'));
-    draggedRowIndex = null;
-  }
-
-  function addDnDHandlers(row) {
-    row.addEventListener('dragstart', handleDragStart);
-    row.addEventListener('dragenter', handleDragEnter);
-    row.addEventListener('dragover', handleDragOver);
-    row.addEventListener('dragleave', handleDragLeave);
-    row.addEventListener('drop', handleDrop);
-    row.addEventListener('dragend', handleDragEnd);
-    
-    // Mobil dokunmatik desteği
-    row.addEventListener('touchmove', handleTouchMove, {passive: false});
-    row.addEventListener('touchend', handleTouchEnd);
+    if (dragSrcEl) {
+      dragSrcEl.classList.remove('dragging');
+      tbody.querySelectorAll('tr').forEach(row => row.classList.remove('placeholder'));
+      draggedRowIndex = null;
+    }
   }
 
   // Mobil dokunmatik desteği
   let touchStartY = 0;
   let touchCurrentRow = null;
+  let touchStartRowIndex = 0;
+
+  function handleTouchStart(e) {
+    touchCurrentRow = this.parentElement;
+    touchStartRowIndex = Array.from(tbody.children).indexOf(touchCurrentRow);
+    touchStartY = e.touches[0].clientY;
+    touchCurrentRow.classList.add('dragging');
+    touchCurrentRow.style.transition = 'none';
+    e.preventDefault();
+  }
 
   function handleTouchMove(e) {
-    e.preventDefault();
-    if (!touchCurrentRow) {
-      touchCurrentRow = this;
-      touchStartY = e.touches[0].clientY;
-      touchCurrentRow.classList.add('dragging');
-    }
+    if (!touchCurrentRow) return;
     
     const y = e.touches[0].clientY;
     const deltaY = y - touchStartY;
@@ -309,15 +314,33 @@
         }
       }
     }
+    e.preventDefault();
   }
 
   function handleTouchEnd() {
     if (touchCurrentRow) {
       touchCurrentRow.classList.remove('dragging');
       touchCurrentRow.style.transform = '';
+      touchCurrentRow.style.transition = '';
       touchCurrentRow = null;
     }
   }
+
+  function addDnDHandlers(cell) {
+    cell.addEventListener('dragstart', handleDragStart);
+    cell.addEventListener('dragend', handleDragEnd);
+    
+    // Mobil dokunmatik desteği
+    cell.addEventListener('touchstart', handleTouchStart, {passive: false});
+    cell.addEventListener('touchmove', handleTouchMove, {passive: false});
+    cell.addEventListener('touchend', handleTouchEnd);
+  }
+
+  // Tablo body için drop hedefi
+  tbody.addEventListener('dragover', handleDragOver);
+  tbody.addEventListener('dragenter', handleDragEnter);
+  tbody.addEventListener('dragleave', handleDragLeave);
+  tbody.addEventListener('drop', handleDrop);
 
   // Event listener'ları ekle
   saveBtn.addEventListener('click', saveData);
